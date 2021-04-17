@@ -95,5 +95,46 @@ let exp_to_concrete_string (exp : expr) : string =
      
 (* exp_to_abstract_string exp -- Return a string representation of the
    abstract syntax of the expression `exp` *)
-let exp_to_abstract_string (exp : expr) : string =
-  failwith "exp_to_abstract_string not implemented" ;;
+
+let unop_to_abstract_string (u: unop) : string =
+  match u with
+  | Negate -> "Negate" ;;
+
+let binop_to_abstract_string (b: binop) : string =
+  match b with
+  | Plus -> "Plus"
+  | Minus -> "Minus"
+  | Times -> "Times"
+  | Equals -> "Equals"
+  | LessThan -> "Less Than" ;;
+
+let rec exp_to_abstract_string (exp : expr) : string =
+  match exp with
+  | Var v -> Printf.sprintf "Var(%s)" v
+  | Num i -> Printf.sprintf "Num(%i)" i
+  | Bool b -> Printf.sprintf "Bool(%b)" b
+  | Unop (un, exp1) -> let s = unop_to_abstract_string un in
+                      Printf.sprintf "Unop(%s, %s)" s (exp_to_abstract_string exp1)
+  | Binop (bi, exp1, exp2) -> let s = binop_to_abstract_string bi in
+                              Printf.sprintf "Binop(%s, %s, %s)" s 
+                              (exp_to_abstract_string exp1)
+                              (exp_to_abstract_string exp2)
+  | Conditional (exp1, exp2, exp3) -> Printf.sprintf "Conditional(%s, %s, %s)"
+                                      (exp_to_abstract_string exp1)
+                                      (exp_to_abstract_string exp2)
+                                      (exp_to_abstract_string exp3)
+  | Fun (v, exp1) -> Printf.sprintf "Fun(%s, %s)" v
+                     (exp_to_abstract_string exp1)
+  | Let (v, exp1, exp2) -> Printf.sprintf "Let(%s, %s, %s)"
+                           v
+                           (exp_to_abstract_string exp1)
+                           (exp_to_abstract_string exp2)
+  | Letrec (v, exp1, exp2) -> Printf.sprintf "Letrec(%s, %s, %s)"
+                              v
+                              (exp_to_abstract_string exp1)
+                              (exp_to_abstract_string exp2)
+  | Raise -> "Raise"
+  | Unassigned -> "Unassigned"
+  | App (exp1, exp2) -> Printf.sprintf "App(%s, %s)" 
+                       (exp_to_abstract_string exp1)
+                       (exp_to_abstract_string exp2) ;;
