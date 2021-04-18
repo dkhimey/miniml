@@ -7,6 +7,20 @@
   Abstract syntax of MiniML expressions 
  *)
 
+(* match exp with
+  | Var v ->
+  | Num i ->
+  | Bool b ->
+  | Unop (un, exp1) ->
+  | Binop (bi, exp1, exp2) ->
+  | Conditional (exp1, exp2, exp3) ->
+  | Fun (v, exp1) ->
+  | Let (v, exp1, exp2) ->
+  | Letrec (v, exp1, exp2) ->
+  | Raise ->
+  | Unassigned ->
+  | App (exp1, exp2) ->  *)
+
 type unop =
   | Negate
 ;;
@@ -61,7 +75,23 @@ let vars_of_list : string list -> varidset =
 (* free_vars exp -- Returns the set of `varid`s corresponding to free
    variables in `exp` *)
 let free_vars (exp : expr) : varidset =
-  failwith "free_vars not implemented" ;;
+  let rec add_to_set (e: expr) (set: varidset) =
+    match e with
+    | Var v -> SS.add v set
+    | Num i -> SS.empty
+    | Bool b -> SS.empty
+    | Unop (un, exp1) -> add_to_set exp1 set
+    | Binop (bi, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set);
+    | Conditional (exp1, exp2, exp3) -> add_to_set exp1 
+                                        (add_to_set exp2 
+                                        (add_to_set exp3 set))
+    | Fun (v, exp1) -> add_to_set exp1 (SS.remove v set)
+    | Let (v, exp1, exp2)
+    | Letrec (v, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 (SS.remove v set))
+    | Raise -> SS.empty
+    | Unassigned -> SS.empty
+    | App (exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set) in
+  add_to_set exp SS.empty;;
   
 (* new_varname () -- Returns a freshly minted `varid` constructed with
    a running counter a la `gensym`. Assumes no variable names use the
