@@ -100,8 +100,16 @@ let free_vars (exp : expr) : varidset =
    a running counter a la `gensym`. Assumes no variable names use the
    prefix "var". (Otherwise, they might accidentally be the same as a
    generated variable name.) *)
-let new_varname () : varid =
-  failwith "new_varname not implemented" ;;
+
+(* Are we allowed to change header line?
+    let new_varname () : varid = *)
+
+let new_varname =
+    let ctr = ref 0 in
+    fun () ->
+      let temp = "x" ^ string_of_int !ctr in
+      incr ctr;
+      temp ;;
 
 (*......................................................................
   Substitution 
