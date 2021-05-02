@@ -115,8 +115,21 @@ let eval_t (exp : expr) (_env : Env.env) : Env.value =
 
 (* The SUBSTITUTION MODEL evaluator -- to be completed *)
    
-let eval_s (_exp : expr) (_env : Env.env) : Env.value =
-  failwith "eval_s not implemented" ;;
+let eval_s (exp : expr) (_env : Env.env) : Env.value =
+  let frees = free_vars exp in
+  let new_exp = subst in
+  | Var v ->
+  | Num i -> Num i
+  | Bool b -> Bool b
+  | Unop (un, exp1) ->
+  | Binop (bi, exp1, exp2) ->
+  | Conditional (exp1, exp2, exp3) ->
+  | Fun (v, exp1) ->
+  | Let (v, exp1, exp2) ->
+  | Letrec (v, exp1, exp2) ->
+  | Raise -> Raise
+  | Unassigned -> Unassigned
+  | App (exp1, exp2) -> ;;
      
 (* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator -- to be
    completed *)

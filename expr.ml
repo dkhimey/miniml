@@ -78,18 +78,21 @@ let free_vars (exp : expr) : varidset =
   let rec add_to_set (e: expr) (set: varidset) =
     match e with
     | Var v -> SS.add v set
-    | Num i -> SS.empty
-    | Bool b -> SS.empty
+    | Raise
+    | Unassigned
+    | Num _
+    | Bool _ -> set
     | Unop (un, exp1) -> add_to_set exp1 set
-    | Binop (bi, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set);
+    | Binop (bi, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set)
+    (* check this one *)
     | Conditional (exp1, exp2, exp3) -> add_to_set exp1 
                                         (add_to_set exp2 
                                         (add_to_set exp3 set))
+
     | Fun (v, exp1) -> add_to_set exp1 (SS.remove v set)
     | Let (v, exp1, exp2)
+    (* make sure letrec and let are the same *)
     | Letrec (v, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 (SS.remove v set))
-    | Raise -> SS.empty
-    | Unassigned -> SS.empty
     | App (exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set) in
   add_to_set exp SS.empty;;
   
@@ -111,9 +114,48 @@ let new_varname () : varid =
 (* subst var_name repl exp -- Return the expression `exp` with `repl`
    substituted for free occurrences of `var_name`, avoiding variable
    capture *)
-let subst (var_name : varid) (repl : expr) (exp : expr) : expr =
-  failwith "subst not implemented" ;;
-     
+
+   (* 1. is the subbing var same as input? if true then done 
+      2. is the input of func in the free vars of expression we're subbing?
+          --> then two different cases*)
+let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
+  let frees = free_vars exp in
+  match exp with
+  | Var v -> if SS.mem v frees && v = var_name then repl
+             else Var v
+  | Num i -> Num i
+  | Bool b -> Bool b
+  | Unop (un, exp1) ->  Unop (un, subst var_name repl exp1)
+  | Binop (bi, exp1, exp2) ->  Binop (bi, subst var_name repl exp1, 
+                                          subst var_name repl exp2)
+  (* check conditional *)
+  | Conditional (exp1, exp2, exp3) -> Conditional (subst var_name repl exp1, 
+                                                   subst var_name repl exp2, 
+                                                   subst var_name repl exp3)
+  | Fun (v, exp1) -> 
+                    if var_name = v then Fun (v, exp1)
+                    else let repl_frees = free_vars repl in
+                         if SS.mem v repl_frees then 
+                          let z = new_varname () in
+                            Fun (z, subst var_name repl (subst v (Var z) exp1))
+                         else Fun (v, subst var_name repl exp1)
+  | Let (v, exp1, exp2) -> if v = var_name then 
+                              Let (v, subst var_name repl exp1, exp2)
+                           else let repl_frees = free_vars repl in
+                                if SS.mem v repl_frees then 
+                                  let z = new_varname () in
+                                    Let (z,
+                                        subst var_name repl exp1,
+                                        subst var_name repl (subst v (Var z) exp2))
+                                else Let (v,
+                                         subst var_name repl exp1,
+                                         subst var_name repl exp2)
+  (* is letrec the same as let? *)
+  | Letrec (v, exp1, exp2) -> failwith "not done"
+  | Raise -> Raise
+  | Unassigned -> Unassigned
+  | App (exp1, exp2) -> App (subst var_name repl exp1, subst var_name repl exp2);;
+
 (*......................................................................
   String representations of expressions
  *)
@@ -145,23 +187,23 @@ let rec exp_to_concrete_string (exp : expr) : string =
                               (exp_to_concrete_string exp1)
                               s
                               (exp_to_concrete_string exp2)
-  | Conditional (exp1, exp2, exp3) -> Printf.sprintf "if %s then %s else %s)"
+  | Conditional (exp1, exp2, exp3) -> Printf.sprintf "if (%s) then (%s) else (%s)"
                                       (exp_to_concrete_string exp1)
                                       (exp_to_concrete_string exp2)
                                       (exp_to_concrete_string exp3)
-  | Fun (v, exp1) -> Printf.sprintf "f(%s) = %s" v
+  | Fun (v, exp1) -> Printf.sprintf "fun %s -> (%s)" v
                      (exp_to_concrete_string exp1)
   | Let (v, exp1, exp2) -> Printf.sprintf "let %s = %s in %s"
                            v
                            (exp_to_concrete_string exp1)
                            (exp_to_concrete_string exp2)
-  | Letrec (v, exp1, exp2) -> Printf.sprintf "let rec %s = %s in %s"
+  | Letrec (v, exp1, exp2) -> Printf.sprintf "let rec %s = (%s) in (%s)"
                               v
                               (exp_to_concrete_string exp1)
                               (exp_to_concrete_string exp2)
   | Raise -> "Raise"
   | Unassigned -> "Unassigned"
-  | App (exp1, exp2) -> Printf.sprintf "f = %s, f(%s)" 
+  | App (exp1, exp2) -> Printf.sprintf "(%s %s)" 
                        (exp_to_concrete_string exp1)
                        (exp_to_concrete_string exp2) ;;
 
