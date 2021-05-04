@@ -37,16 +37,26 @@ let repl () =
         let exp = MP.input ML.token lexbuf in 
         
         (* EVALuate it *)
-        let res = Ev.evaluate exp env in
-         
+        let res_s = Ev.evaluate_s exp env in
+        let res_d = Ev.evaluate_d exp env in
+        let res_l = Ev.evaluate_l exp env in
         (* PRINT the result; in this initial version, the trivial
            evaluator just returns the expression unchanged as an
            element of the `Env.value` type (found in `expr.ml`), so we
            just extract the expression back out and print it *)
-        match res with
+        (match res_s with
         | Val resexp ->
-           printf "==> %s\n" (Ex.exp_to_abstract_string resexp)
-        | _ -> failwith "not handling other cases yet"
+           printf "s ==> %s\n" (Ex.exp_to_concrete_string resexp);
+           (match res_d with
+            | Val resexp ->
+              printf "s ==> %s\n" (Ex.exp_to_concrete_string resexp);
+              (match res_l with
+              | Val resexp ->
+                printf "l ==> %s\n" (Ex.exp_to_concrete_string resexp)
+              | _ -> failwith "not handling other cases yet")
+            | _ -> failwith "not handling other cases yet")
+        | _ -> failwith "not handling other cases yet")
+
       with
       | MP.Error -> printf "xx> parse error\n"
       | Ev.EvalError msg -> printf "xx> evaluation error: %s\n" msg
