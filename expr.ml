@@ -101,9 +101,6 @@ let free_vars (exp : expr) : varidset =
    prefix "var". (Otherwise, they might accidentally be the same as a
    generated variable name.) *)
 
-(* Are we allowed to change header line?
-    let new_varname () : varid = *)
-
 let new_varname =
     let ctr = ref 0 in
     fun () ->
@@ -123,9 +120,6 @@ let new_varname =
    substituted for free occurrences of `var_name`, avoiding variable
    capture *)
 
-   (* 1. is the subbing var same as input? if true then done 
-      2. is the input of func in the free vars of expression we're subbing?
-          --> then two different cases*)
 let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
   let frees = free_vars exp in
   match exp with
@@ -159,7 +153,17 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
                                          subst var_name repl exp1,
                                          subst var_name repl exp2)
   (* is letrec the same as let? *)
-  | Letrec (v, exp1, exp2) -> failwith "not done"
+  | Letrec (v, exp1, exp2) -> if v = var_name 
+                              then Letrec (v, subst var_name repl exp1, exp2)
+                              else let repl_frees = free_vars repl in
+                                if SS.mem v repl_frees then
+                                let z = new_varname () in
+                                Letrec (z,
+                                        subst var_name repl exp1,
+                                        subst var_name repl (subst v (Var z) exp2))
+                                else Letrec (v,
+                                            subst var_name repl exp1,
+                                            subst var_name repl exp2)
   | Raise -> Raise
   | Unassigned -> Unassigned
   | App (exp1, exp2) -> App (subst var_name repl exp1, subst var_name repl exp2);;
@@ -173,7 +177,7 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
 
 let unop_to_concrete_string (u: unop) : string =
   match u with
-  | Negate -> "Negate" ;;
+  | Negate -> "-" ;;
 
 let binop_to_concrete_string (b: binop) : string =
   match b with
