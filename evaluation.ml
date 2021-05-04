@@ -79,7 +79,7 @@ module Env : ENV =
 
     let rec lookup (env : env) (varname : varid) : value =
       match env with
-      | [] -> raise (EvalError ("Undefined Variable: " ^ varname))
+      | [] -> raise (EvalError ("unbound variable: " ^ varname))
       | (var, value) :: tl -> if varname = var then !value
                               else lookup tl varname ;;
 
@@ -140,7 +140,8 @@ let eval_t (exp : expr) (_env : Env.env) : Env.value =
   (* coerce the expr, unchanged, into a value *)
   Env.Val exp ;;
 
-(* helper functions *)
+(* ======== helper functions ======= *)
+
 let devalue (x : Env.value) : expr =
   match x with
   | Val (v) -> v
@@ -152,9 +153,27 @@ let declosure (x : Env.value) : expr * Env.env =
   | Closure (c) -> c
 
 let value_to_int (e: Env.value) : int =
-  match e with
-  | Env.Val (Num n) -> n
+  match devalue e with
+  | Num n -> n
   | _ -> raise (EvalError "Function Applied to Non-integer")
+
+let value_to_bool (e: Env.value) : bool =
+  match devalue e with
+  | Bool b -> b
+  | _ -> raise (EvalError "Non-boolean")
+
+let eval_conditional (eval_fun : Expr.expr -> Env.value) 
+                         (e1 : Expr.expr) 
+                         (e2 : Expr.expr) 
+                         (e3 : Expr.expr) : Env.value =
+  let truth = value_to_bool (eval_fun e1) in
+            if truth then eval_fun e2
+            else eval_fun e3
+
+let get_fun_args (f: Env.value) : Expr.varid * Expr.expr =
+  match devalue f with
+  | Fun (x,y) -> (x,y)
+  | _ -> raise (EvalError "Function Error")
 
 let unop_to_val (u : unop) (a : Env.value) : Env.value=
   let x = value_to_int a in
@@ -170,111 +189,128 @@ let binop_to_val (b: binop) (p: Env.value) (q: Env.value) : Env.value =
   | Equals -> Env.Val (Bool (x = y))
   | LessThan -> Env.Val (Bool (x < y))
 
+let replace_unassigned (env: Env.env) (repl: Env.value) : unit =
+  Env.iter (fun elt -> if !(snd elt) = Env.Val Unassigned 
+                        then (snd elt) := repl
+                       else ()) env
+
+(* ============================== *)
+
 (* The SUBSTITUTION MODEL evaluator -- to be completed *)
 
 let rec eval_s (exp : expr) (env : Env.env) : Env.value =
   let eval (e : expr) : Env.value = eval_s e env in
   match exp with
-  | Var v -> Env.Val (Var v)
+  | Var v -> raise (EvalError ("unbound variable: " ^ v))
   | Num i -> Env.Val (Num i)
   | Bool b -> Env.Val (Bool b)
   | Unop (un, exp1) -> unop_to_val un (eval exp1)
   | Binop (bi, exp1, exp2) -> binop_to_val bi (eval exp1) 
                                               (eval exp2)
-  | Conditional (exp1, exp2, exp3) -> 
-          (match devalue (eval exp1) with
-          | Bool (true) -> eval exp2
-          | Bool (false) -> eval exp3
-          | _ -> raise (EvalError "Expecting T/F expression"))
+  | Conditional (exp1, exp2, exp3) -> eval_conditional
+                                       eval
+                                       exp1 exp2 exp3
   | Fun (v, exp1) -> Env.Val (Fun (v, exp1))
-  | Let (v, exp1, exp2) -> 
-          (match eval exp1 with
-          | Env.Val (sub_exp) -> eval (subst v sub_exp exp2)
-          | _ -> raise (EvalError "Closure in Substitution"))
-  (* impleneting letrec??? *)
+  | Let (v, exp1, exp2) -> let sub = devalue (eval exp1) in
+                            eval (subst v sub exp2)
   | Letrec (v, exp1, exp2) -> let vD = devalue (eval exp1) in
                               let repl = Letrec (v, vD, Var (v)) in
                               let new_repl = subst v repl vD in
                               eval (subst v new_repl exp2)
   | Raise
   | Unassigned -> raise EvalException
-  | App (exp1, exp2) -> 
-                        match eval exp1 with
-                        | Env.Val (Fun (x, b)) -> 
-                            let Env.Val sub_exp = eval exp2 in
-                              eval (subst x sub_exp b)
-                        | _ -> raise (EvalError "Eval_s Function Error") ;;
+  | App (exp1, exp2) -> let x, b = get_fun_args (eval exp1) in
+                          let sub = devalue (eval exp2) in
+                            eval (subst x sub b) ;;
      
 (* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator -- to be
    completed *)
-   
-let rec eval_d (exp : expr) (env : Env.env) : Env.value =
+(* let rec env_eval (fun_eval) (rec_eval) (app_eval) (exp) (env) : Env.value =
+  let eval e = env_eval fun_eval rec_eval app_eval e env in
   match exp with
   | Var v -> Env.lookup env v
   | Num i -> Env.Val (Num i)
   | Bool b -> Env.Val (Bool b)
-  | Unop (un, exp1) -> unop_to_val un (eval_d exp1 env)
-  | Binop (bi, exp1, exp2) -> binop_to_val bi (eval_d exp1 env) 
-                                              (eval_d exp2 env)
-  | Conditional (exp1, exp2, exp3) ->
-          (match devalue (eval_d exp1 env) with
-          | Bool (true) -> eval_d exp2 env
-          | Bool (false) -> eval_d exp3 env
-          | _ -> raise (EvalError "Expecting T/F expression"))
+  | Unop (un, exp1) -> unop_to_val un (eval exp1)
+  | Binop (bi, exp1, exp2) -> binop_to_val bi (eval exp1) 
+                                              (eval exp2)
+  | Conditional (exp1, exp2, exp3) -> eval_conditional
+                                       eval
+                                       exp1 exp2 exp3
+  | Fun (v, exp1) -> fun_eval v exp1 env
+  | Let (v, exp1, exp2) -> let eval_exp1 = ref (eval exp1) in
+                            let new_env = Env.extend env v eval_exp1 in
+                              env_eval fun_eval rec_eval app_eval exp2 new_env 
+  | Letrec (v, exp1, exp2) -> let eval_exp1 = ref (eval exp1) in
+                              rec_eval v exp1 exp2
+  | Raise
+  | Unassigned -> raise EvalException
+  | App (exp1, exp2) -> app_eval exp1 exp2;;
+
+let fun_evald v exp _env : Env.value =
+  Val (Fun (v, exp)) ;;
+let fun_evall v exp env : Env.value =
+  Closure (Fun (v, exp), env);;
+let rec_evald =
+  fun_evald ;;
+let rec_;; *)
+
+
+let rec eval_d (exp : expr) (env : Env.env) : Env.value =
+  let eval e = eval_d e env in
+  match exp with
+  | Var v -> Env.lookup env v
+  | Num i -> Env.Val (Num i)
+  | Bool b -> Env.Val (Bool b)
+  | Unop (un, exp1) -> unop_to_val un (eval exp1)
+  | Binop (bi, exp1, exp2) -> binop_to_val bi (eval exp1) 
+                                              (eval exp2)
+  | Conditional (exp1, exp2, exp3) -> eval_conditional
+                                       eval
+                                       exp1 exp2 exp3
   | Fun (v, exp1) -> Val (Fun (v, exp1))
   | Letrec (v, exp1, exp2)
-  | Let (v, exp1, exp2) -> let eval_exp1 = ref (eval_d exp1 env) in
+  | Let (v, exp1, exp2) -> let eval_exp1 = ref (eval exp1) in
                             let new_env = Env.extend env v eval_exp1 in
                               eval_d exp2 new_env
   | Raise
   | Unassigned -> raise EvalException
-  | App (exp1, exp2) ->  
-                         match eval_d exp1 env with
-                         | Env.Val (Fun (x, b)) -> 
-                            let eval_exp2 = ref (eval_d exp2 env) in
-                              let new_env = Env.extend env x eval_exp2 in
-                              eval_d b new_env
-                         | _ -> raise (EvalError "Eval_d Function Error") ;;
+  | App (exp1, exp2) ->  let x, b = get_fun_args (eval exp1) in
+                          let eval_exp2 = ref (eval exp2) in
+                            let new_env = Env.extend env x eval_exp2 in
+                            eval_d b new_env ;;
        
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator -- optionally
    completed as (part of) your extension *)
 
-let replace_unassigned (env: Env.env) (repl: Env.value) : unit =
-  Env.iter (fun elt -> if !(snd elt) = Env.Val Unassigned then (snd elt) := repl
-                        else ()) env
-
 let rec eval_l (exp : expr) (env : Env.env) : Env.value =
+  let eval e = eval_l e env in
   match exp with
   | Var v -> Env.lookup env v
   | Num i -> Env.Val (Num i)
   | Bool b -> Env.Val (Bool b)
-  | Unop (un, exp1) -> unop_to_val un (eval_l exp1 env)
-  | Binop (bi, exp1, exp2) -> binop_to_val bi (eval_l exp1 env) 
-                                              (eval_l exp2 env)
-  | Conditional (exp1, exp2, exp3) ->
-          (match devalue (eval_l exp1 env) with
-          | Bool (true) -> eval_l exp2 env
-          | Bool (false) -> eval_l exp3 env
-          | _ -> raise (EvalError "Expecting T/F expression"))
-  | Fun (v, exp1) -> 
-                     Closure (Fun (v, exp1), env)
-  | Let (v, exp1, exp2) -> let eval_exp1 = ref (eval_l exp1 env) in
+  | Unop (un, exp1) -> unop_to_val un (eval exp1)
+  | Binop (bi, exp1, exp2) -> binop_to_val bi (eval exp1) 
+                                              (eval exp2)
+  | Conditional (exp1, exp2, exp3) -> eval_conditional
+                                       eval
+                                       exp1 exp2 exp3
+  | Fun (v, exp1) -> Closure (Fun (v, exp1), env)
+  | Let (v, exp1, exp2) -> let eval_exp1 = ref (eval exp1) in
                             let new_env = Env.extend env v eval_exp1 in
                               eval_l exp2 new_env
-  | Letrec (v, exp1, exp2) ->
-                                let new_env = Env.extend env v (ref (Env.Val Unassigned)) in
-                                let eval_exp1 = (eval_l exp1 new_env) in
-                                replace_unassigned new_env eval_exp1;
-                                eval_l exp2 new_env
+  | Letrec (v, exp1, exp2) -> 
+      let new_env = Env.extend env v (ref (Env.Val Unassigned)) in
+      let eval_exp1 = (eval_l exp1 new_env) in
+        replace_unassigned new_env eval_exp1;
+        eval_l exp2 new_env
   | Raise
   | Unassigned -> raise EvalException
-  | App (p, q) -> 
-                         match declosure(eval_l p env) with
-                         | Fun (x, b), e_lexical -> 
-                            let eval_q = ref (eval_l q env) in
-                              let new_lexical = Env.extend e_lexical x eval_q in
-                              eval_l b new_lexical
-                         | _ -> raise (EvalError "Eval_l Function Error") ;;
+  | App (p, q) -> match declosure(eval_l p env) with
+                  | Fun (x, b), env_lexical -> 
+                    let new_lexical = Env.extend env_lexical x (ref (eval q)) in
+                      eval_l b new_lexical
+                  | _ -> raise (EvalError "Eval_l Function Error") ;;
 
 (* The EXTENDED evaluator -- if you want, you can provide your
    extension as a separate evaluator, or if it is type- and

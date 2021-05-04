@@ -29,38 +29,54 @@ let repl () =
 
   (* the main LOOP *)
   while true do
+  (* prompt *)
+  printf "<== %!";
+  (* READ and parse an expression from the input *)
+  let exp = MP.input ML.token lexbuf in 
+  
     (try
-        (* prompt *)
-        printf "<== %!";
-        
-        (* READ and parse an expression from the input *)
-        let exp = MP.input ML.token lexbuf in 
-        
         (* EVALuate it *)
         let res_s = Ev.evaluate_s exp env in
-        let res_d = Ev.evaluate_d exp env in
-        let res_l = Ev.evaluate_l exp env in
         (* PRINT the result; in this initial version, the trivial
            evaluator just returns the expression unchanged as an
            element of the `Env.value` type (found in `expr.ml`), so we
            just extract the expression back out and print it *)
         (match res_s with
         | Val resexp ->
-           printf "s ==> %s\n" (Ex.exp_to_concrete_string resexp);
-           (match res_d with
-            | Val resexp ->
-              printf "s ==> %s\n" (Ex.exp_to_concrete_string resexp);
-              (match res_l with
-              | Val resexp ->
-                printf "l ==> %s\n" (Ex.exp_to_concrete_string resexp)
-              | _ -> failwith "not handling other cases yet")
-            | _ -> failwith "not handling other cases yet")
-        | _ -> failwith "not handling other cases yet")
+           printf "s ==> %s\n" (Ex.exp_to_concrete_string resexp)
+        | _ -> failwith "not handling other cases yet");
+      with
+      | MP.Error -> printf "xx> parse error\n"
+      | Ev.EvalError msg -> printf "sx> evaluation error: %s\n" msg
+      | Ev.EvalException -> printf "sx> evaluation exception\n"
+      | End_of_file -> printf "Goodbye.\n"; exit 0
+    );
+
+    (try
+        let res_d = Ev.evaluate_d exp env in
+        (match res_d with
+        | Val resexp ->
+           printf "d ==> %s\n" (Ex.exp_to_concrete_string resexp)
+        | _ -> failwith "not handling other cases yet");
 
       with
       | MP.Error -> printf "xx> parse error\n"
-      | Ev.EvalError msg -> printf "xx> evaluation error: %s\n" msg
-      | Ev.EvalException -> printf "xx> evaluation exception\n"
+      | Ev.EvalError msg -> printf "dx> evaluation error: %s\n" msg
+      | Ev.EvalException -> printf "dx> evaluation exception\n"
+      | End_of_file -> printf "Goodbye.\n"; exit 0
+    );
+
+    (try
+        let res_l = Ev.evaluate_l exp env in
+        (match res_l with
+        | Val resexp ->
+           printf "l ==> %s\n" (Ex.exp_to_concrete_string resexp)
+        | _ -> failwith "not handling other cases yet");
+
+      with
+      | MP.Error -> printf "xx> parse error\n"
+      | Ev.EvalError msg -> printf "lx> evaluation error: %s\n" msg
+      | Ev.EvalException -> printf "lx> evaluation exception\n"
       | End_of_file -> printf "Goodbye.\n"; exit 0
     );
     flush stdout

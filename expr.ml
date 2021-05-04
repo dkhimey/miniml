@@ -83,16 +83,17 @@ let free_vars (exp : expr) : varidset =
     | Num _
     | Bool _ -> set
     | Unop (un, exp1) -> add_to_set exp1 set
-    | Binop (bi, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set)
-    (* check this one *)
+    | Binop (bi, exp1, exp2) -> add_to_set exp1 
+                               (add_to_set exp2 set)
     | Conditional (exp1, exp2, exp3) -> add_to_set exp1 
                                         (add_to_set exp2 
                                         (add_to_set exp3 set))
 
     | Fun (v, exp1) -> add_to_set exp1 (SS.remove v set)
     | Let (v, exp1, exp2)
-    (* make sure letrec and let are the same *)
-    | Letrec (v, exp1, exp2) -> add_to_set exp1 (add_to_set exp2 (SS.remove v set))
+    | Letrec (v, exp1, exp2) -> add_to_set exp1 
+                                (add_to_set exp2  
+                                (SS.remove v set))
     | App (exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set) in
   add_to_set exp SS.empty;;
   
@@ -104,7 +105,7 @@ let free_vars (exp : expr) : varidset =
 let new_varname =
     let ctr = ref 0 in
     fun () ->
-      let temp = "x" ^ string_of_int !ctr in
+      let temp = "xyz123" ^ string_of_int !ctr in
       incr ctr;
       temp ;;
 
@@ -121,53 +122,46 @@ let new_varname =
    capture *)
 
 let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
+  let sub = subst var_name repl in
   let frees = free_vars exp in
+  let repl_frees = free_vars repl in
+  (* function to be used in fun, let, letrec to avoid redundancy *)
+  let subst_aux v e1 e2 e3 =
+    if var_name = v then e1
+      else if SS.mem v repl_frees then e2
+      else e3 in
+
   match exp with
   | Var v -> if SS.mem v frees && v = var_name then repl
              else Var v
   | Num i -> Num i
   | Bool b -> Bool b
-  | Unop (un, exp1) ->  Unop (un, subst var_name repl exp1)
-  | Binop (bi, exp1, exp2) ->  Binop (bi, subst var_name repl exp1, 
-                                          subst var_name repl exp2)
+  | Unop (un, exp1) ->  Unop (un, sub exp1)
+  | Binop (bi, exp1, exp2) ->  Binop (bi, sub exp1, 
+                                          sub exp2)
   (* check conditional *)
-  | Conditional (exp1, exp2, exp3) -> Conditional (subst var_name repl exp1, 
-                                                   subst var_name repl exp2, 
-                                                   subst var_name repl exp3)
+  | Conditional (exp1, exp2, exp3) -> Conditional (sub exp1, 
+                                                   sub exp2, 
+                                                   sub exp3)
   | Fun (v, exp1) -> 
-                    if var_name = v then Fun (v, exp1)
-                    else let repl_frees = free_vars repl in
-                         if SS.mem v repl_frees then 
-                          let z = new_varname () in
-                            Fun (z, subst var_name repl (subst v (Var z) exp1))
-                         else Fun (v, subst var_name repl exp1)
-  | Let (v, exp1, exp2) -> if v = var_name then 
-                              Let (v, subst var_name repl exp1, exp2)
-                           else let repl_frees = free_vars repl in
-                                if SS.mem v repl_frees then 
-                                  let z = new_varname () in
-                                    Let (z,
-                                        subst var_name repl exp1,
-                                        subst var_name repl (subst v (Var z) exp2))
-                                else Let (v,
-                                         subst var_name repl exp1,
-                                         subst var_name repl exp2)
-  (* is letrec the same as let? *)
-  | Letrec (v, exp1, exp2) -> if v = var_name 
-                              then Letrec (v, subst var_name repl exp1, exp2)
-                              else let repl_frees = free_vars repl in
-                                if SS.mem v repl_frees then
-                                let z = new_varname () in
-                                Letrec (z,
-                                        subst var_name repl exp1,
-                                        subst var_name repl (subst v (Var z) exp2))
-                                else Letrec (v,
-                                            subst var_name repl exp1,
-                                            subst var_name repl exp2)
+      let z = new_varname () in
+        subst_aux v (Fun (v, exp1)) 
+                    (Fun (z, sub (subst v (Var z) exp1))) 
+                    (Fun (v, sub exp1))
+  | Let (v, exp1, exp2) -> 
+      let z = new_varname () in
+        subst_aux v (Let (v, sub exp1, exp2)) 
+                    (Let (z, sub exp1, sub (subst v (Var z) exp2))) 
+                    (Let (v, sub exp1, sub exp2))
+  | Letrec (v, exp1, exp2) -> 
+      let z = new_varname () in
+        subst_aux v (Letrec (v, sub exp1, exp2))
+                    (Letrec (z, sub exp1, sub (subst v (Var z) exp2)))
+                    (Letrec (v, sub exp1, sub exp2))
   | Raise -> Raise
   | Unassigned -> Unassigned
-  | App (exp1, exp2) -> App (subst var_name repl exp1, subst var_name repl exp2);;
-
+  | App (exp1, exp2) -> App (sub exp1, sub exp2);;
+  
 (*......................................................................
   String representations of expressions
  *)
@@ -175,11 +169,11 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
 (* exp_to_concrete_string exp -- Returns a string representation of
    the concrete syntax of the expression `exp` *)
 
-let unop_to_concrete_string (u: unop) : string =
+let unop_to_conc_str (u: unop) : string =
   match u with
   | Negate -> "-" ;;
 
-let binop_to_concrete_string (b: binop) : string =
+let binop_to_conc_str (b: binop) : string =
   match b with
   | Plus -> "+"
   | Minus -> "-"
@@ -192,9 +186,9 @@ let rec exp_to_concrete_string (exp : expr) : string =
   | Var v -> Printf.sprintf "%s" v
   | Num i -> Printf.sprintf "%i" i
   | Bool b -> Printf.sprintf "%b" b
-  | Unop (un, exp1) -> let s = unop_to_concrete_string un in
+  | Unop (un, exp1) -> let s = unop_to_conc_str un in
                       Printf.sprintf "%s %s" s (exp_to_concrete_string exp1)
-  | Binop (bi, exp1, exp2) -> let s = binop_to_concrete_string bi in
+  | Binop (bi, exp1, exp2) -> let s = binop_to_conc_str bi in
                               Printf.sprintf "%s %s %s"
                               (exp_to_concrete_string exp1)
                               s
@@ -240,16 +234,19 @@ let rec exp_to_abstract_string (exp : expr) : string =
   | Var v -> Printf.sprintf "Var(%s)" v
   | Num i -> Printf.sprintf "Num(%i)" i
   | Bool b -> Printf.sprintf "Bool(%b)" b
-  | Unop (un, exp1) -> let s = unop_to_abstract_string un in
-                      Printf.sprintf "Unop(%s, %s)" s (exp_to_abstract_string exp1)
-  | Binop (bi, exp1, exp2) -> let s = binop_to_abstract_string bi in
-                              Printf.sprintf "Binop(%s, %s, %s)" s 
-                              (exp_to_abstract_string exp1)
-                              (exp_to_abstract_string exp2)
-  | Conditional (exp1, exp2, exp3) -> Printf.sprintf "Conditional(%s, %s, %s)"
-                                      (exp_to_abstract_string exp1)
-                                      (exp_to_abstract_string exp2)
-                                      (exp_to_abstract_string exp3)
+  | Unop (un, exp1) -> 
+      let s = unop_to_abstract_string un in
+        Printf.sprintf "Unop(%s, %s)" s (exp_to_abstract_string exp1)
+  | Binop (bi, exp1, exp2) -> 
+      let s = binop_to_abstract_string bi in
+        Printf.sprintf "Binop(%s, %s, %s)" s 
+        (exp_to_abstract_string exp1)
+        (exp_to_abstract_string exp2)
+  | Conditional (exp1, exp2, exp3) -> 
+      Printf.sprintf "Conditional(%s, %s, %s)"
+                    (exp_to_abstract_string exp1)
+                    (exp_to_abstract_string exp2)
+                    (exp_to_abstract_string exp3)
   | Fun (v, exp1) -> Printf.sprintf "Fun(%s, %s)" v
                      (exp_to_abstract_string exp1)
   | Let (v, exp1, exp2) -> Printf.sprintf "Let(%s, %s, %s)"
