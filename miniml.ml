@@ -33,6 +33,8 @@ let repl () =
   printf "<== %!";
   (* READ and parse an expression from the input *)
   let exp = MP.input ML.token lexbuf in 
+
+  printf "%s\n" (Expr.exp_to_abstract_string exp);
   
     (try
         (* EVALuate it *)
