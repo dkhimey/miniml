@@ -7,20 +7,6 @@
   Abstract syntax of MiniML expressions 
  *)
 
-(* match exp with
-  | Var v ->
-  | Num i ->
-  | Bool b ->
-  | Unop (un, exp1) ->
-  | Binop (bi, exp1, exp2) ->
-  | Conditional (exp1, exp2, exp3) ->
-  | Fun (v, exp1) ->
-  | Let (v, exp1, exp2) ->
-  | Letrec (v, exp1, exp2) ->
-  | Raise ->
-  | Unassigned ->
-  | App (exp1, exp2) ->  *)
-
 type unop =
   | Negate
 ;;
@@ -82,18 +68,17 @@ let free_vars (exp : expr) : varidset =
     | Unassigned
     | Num _
     | Bool _ -> set
-    | Unop (un, exp1) -> add_to_set exp1 set
-    | Binop (bi, exp1, exp2) -> add_to_set exp1 
+    | Unop (_un, exp1) -> add_to_set exp1 set
+    | Binop (_bi, exp1, exp2) -> add_to_set exp1 
                                (add_to_set exp2 set)
     | Conditional (exp1, exp2, exp3) -> add_to_set exp1 
                                         (add_to_set exp2 
                                         (add_to_set exp3 set))
 
-    | Fun (v, exp1) -> add_to_set exp1 (SS.remove v set)
+    | Fun (v, exp1) -> SS.remove v (add_to_set exp1 set)
     | Let (v, exp1, exp2)
-    | Letrec (v, exp1, exp2) -> add_to_set exp1 
-                                (add_to_set exp2  
-                                (SS.remove v set))
+    | Letrec (v, exp1, exp2) -> SS.remove v (add_to_set exp1 
+                                            (add_to_set exp2 set))
     | App (exp1, exp2) -> add_to_set exp1 (add_to_set exp2 set) in
   add_to_set exp SS.empty;;
   
@@ -105,7 +90,7 @@ let free_vars (exp : expr) : varidset =
 let new_varname =
     let ctr = ref 0 in
     fun () ->
-      let temp = "xyz123" ^ string_of_int !ctr in
+      let temp = "var" ^ string_of_int !ctr in
       incr ctr;
       temp ;;
 

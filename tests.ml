@@ -43,6 +43,7 @@ let test () =
     unit_test (subst "x" (Num 4) (Binop (Plus, Var "x", Var "y")) = 
               Binop (Plus, Num 4, Var "y"))
               "subst Binop" ;
+              
     unit_test (subst "x" (Num 4) (Fun ("f", Binop (Plus, Var "x", Var "y"))) = 
               (Fun ("f", Binop (Plus, Num 4, Var "y"))))
               "subst Fun Type 1" ;
